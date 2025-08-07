@@ -1,4 +1,16 @@
 from flask import Flask, request, render_template
+import sqlite3
+
+class DatabaseManager():
+    def __init__(self, database_name):
+        self.database_name = database_name
+    def __enter__(self):
+        self.connect = sqlite3.connect(self.database_name)
+        self.cursor = self.connect.cursor()
+        return self.cursor
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.connect.commit()
+        self.connect.close()
 
 app = Flask(__name__)
 
@@ -15,18 +27,32 @@ def get_login():
     if request.method == 'GET':
         return render_template('login.html')
     else:
-        username = request.form['username']
         password = request.form['password']
-        return f'hello world POST {username} {password}'
+        email = request.form['email']
+        with DatabaseManager('financial_tracker.db') as cursor:
+            res = cursor.execute(f'SELECT * FROM user WHERE email = "{email}" AND password = "{password}"')
+            data = res.fetchone()
+        if data:
+            return f'You are in {email} {password}'
+        else:
+            return f'Wrong password'
+
+
 
 @app.route('/register', methods=['GET','POST'])
 def get_register():
+
     if request.method == 'GET':
         return render_template('register.html')
     else:
         username = request.form['username']
+        surname = request.form['surname']
         password = request.form['password']
-        return f'hello world POST {username} {password}'
+        email = request.form['email']
+        with DatabaseManager('financial_tracker.db') as cursor:
+            cursor.execute('INSERT INTO user (name,surname, password, email) VALUES (?,?,?,?)',(username,surname,password,email))
+
+        return f'User registered: {username} {password} {email} {surname}'
 
 @app.route('/category', methods=['GET', 'POST'])
 def get_all_category():
