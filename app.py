@@ -1,5 +1,11 @@
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, session, redirect
 import sqlite3
+
+app = Flask(__name__)
+app.secret_key =  'qw<ert?yu111io2p"2a3s>.>4d5fghjkl'
+INCOME = 1
+SPEND = 2
+
 
 class DatabaseManager():
     def __init__(self, database_name):
@@ -11,8 +17,6 @@ class DatabaseManager():
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.connect.commit()
         self.connect.close()
-
-app = Flask(__name__)
 
 @app.route('/user', methods=['GET', 'DELETE'])
 def user_handler():
@@ -30,9 +34,10 @@ def get_login():
         password = request.form['password']
         email = request.form['email']
         with DatabaseManager('financial_tracker.db') as cursor:
-            res = cursor.execute(f'SELECT * FROM user WHERE email = "{email}" AND password = "{password}"')
+            res = cursor.execute(f'SELECT id FROM user WHERE email = "{email}" AND password = "{password}"')
             data = res.fetchone()
         if data:
+            session['user_id'] = data[0]
             return f'You are in {email} {password}'
         else:
             return f'Wrong password'
@@ -75,10 +80,26 @@ def delete_category(category_id):
 
 @app.route('/income', methods=['GET', 'POST'])
 def get_all_income():
-    if request.method == 'GET':
-        return 'hello world GET'
+    if 'user_id' in session:
+        if request.method == 'GET':
+            with DatabaseManager('financial_tracker.db') as cursor:
+                print(session['user_id'],'======', session)
+                res = cursor.execute('SELECT * FROM "transaction" WHERE owner = ? AND type = ?', ((session["user_id"]), INCOME))
+                data = res.fetchall()
+            return render_template("dashboard.html", transactions=data, dashboard_action='/income')
+        else:
+            with DatabaseManager('financial_tracker.db') as cursor:
+                transaction_description = request.form['description']
+                transaction_category = request.form['category']
+                transaction_amount = request.form['amount']
+                transaction_date = request.form['date']
+                transaction_owner = session['user_id']
+                transaction_type = INCOME
+                cursor.execute('INSERT INTO "transcation" (description, category, amount, date, owner, type) VALUES (?,?,?,?,?,?)',
+                               (transaction_description, transaction_category, transaction_amount, transaction_date, transaction_owner, transaction_type))
+                return redirect('/income')
     else:
-        return 'hello world POST'
+        return redirect('/login')
 
 @app.route('/income/<income_id>', methods=['GET', 'PATCH', 'DELETE'])
 def get_income(income_id):
@@ -91,10 +112,28 @@ def get_income(income_id):
 
 @app.route('/spend', methods=['GET', 'POST'])
 def get_all_spend():
-    if request.method == 'GET':
-        return 'hello world GET'
+    if 'user_id' in session:
+        if request.method == 'GET':
+            with DatabaseManager('financial_tracker.db') as cursor:
+                print(session['user_id'], '======', session)
+                res = cursor.execute('SELECT * FROM "transaction" WHERE owner = ? AND type = ?',
+                                     ((session["user_id"]), SPEND))
+                data = res.fetchall()
+            return render_template("dashboard.html", transactions=data, dashboard_action='/spend')
+        else:
+            with DatabaseManager('financial_tracker.db') as cursor:
+                transaction_description = request.form['description']
+                transaction_category = request.form['category']
+                transaction_amount = request.form['amount']
+                transaction_date = request.form['date']
+                transaction_owner = session['user_id']
+                transaction_type = SPEND
+                cursor.execute('INSERT INTO "transcation" (description, category, amount, date, owner, type) VALUES (?,?,?,?,?,?)',
+                             (transaction_description, transaction_category, transaction_amount, transaction_date,
+                     transaction_owner, transaction_type))
+                return redirect('/spend')
     else:
-        return 'hello world POST'
+        return redirect('/login')
 
 @app.route('/spend/<spend_id>', methods=['GET', 'PATCH', 'DELETE'])
 def get_spend(spend_id):

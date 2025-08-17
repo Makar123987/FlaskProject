@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard</title>
+</head>
+<body>
+<h1>Dashboard</h1>
+<p>User transactions: {{ transactions }} </p>
+<form action={{ dashboard_action }} method="post">
+    <label for="description">description</label><br>
+    <input type="text" id="description" name="description"><br>
+    <label for="category">category</label><br>
+    <input type="text" id="category" name="category"><br><br>
+    <label for="amount">amount</label><br>
+    <input type="text" id="amount" name="amount"><br><br>
+    <label for="date">date</label><br>
+    <input type="text" id="date" name="date"><br><br>
+    <input type="submit" value="Submit">
+</form>
+</body>
+</html>
