@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Category list</title>
+</head>
+<body>
+<form action="/category" method="post">
+    <label for="category_name">category_name:</label><br>
+    <input type="text" id="category_name" name="category_name"><br>
+    <input type="submit" value="Submit">
+</form>
+{% for user_category in user_categories %}
+
+<p><a href="/category/{{ user_category.id }}">{{ user_category.name }} </a> {% if user_category.owner != 1 %} <a  href="/category/{{ user_category.id }}/delete">DELETE</a></p>
+    {% endif %}
+{% endfor %}
+</body>
+</html>
