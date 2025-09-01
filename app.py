@@ -1,51 +1,13 @@
 from flask import Flask, request, render_template, session, redirect
+from sqlalchemy import select,insert
+from database import db_session, init_db
+import models
 import sqlite3
 
 app = Flask(__name__)
 app.secret_key = 'qw<ert?yu111io2p"2a3s>.>4d5fghjkl'
 INCOME = 1
 SPEND = 2
-
-
-class DBwrapper:
-    def insert(self, table, data):
-        with DatabaseManager('financial_tracker.db') as cursor:
-            cursor.execute(f"INSERT INTO '{table}' ({', '.join(data.keys())}) VALUES ({', '.join(['?'] * len(data))})",
-                           tuple(data.values()))
-
-    def select(self, table, where=None):
-        with DatabaseManager('financial_tracker.db') as cursor:
-            if where:
-                result_params = []
-                for k, v in where.items():
-                    if isinstance(v,(list,tuple)):
-                        result_params.append(f'{k} IN ({", ".join(str(i) for i in v)})')
-                    else:
-                        if isinstance(v, str):
-                            result_params.append(f"{k} = '{v}'")
-                        else:
-                            result_params.append(f"{k} = {v}")
-                result_where = ' AND '.join(result_params)
-
-                cursor.execute(f"SELECT * FROM '{table}' WHERE {result_where}")
-            else:
-                cursor.execute(f"SELECT * FROM '{table}'")
-            return cursor.fetchall()
-
-class DatabaseManager():
-    def __init__(self, database_name):
-        self.database_name = database_name
-
-    def __enter__(self):
-        self.connect = sqlite3.connect(self.database_name)
-        self.connect.row_factory = sqlite3.Row
-        self.cursor = self.connect.cursor()
-        return self.cursor
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.connect.commit()
-        self.connect.close()
-
 
 @app.route('/user', methods=['GET', 'DELETE'])
 def user_handler():
@@ -61,12 +23,12 @@ def get_login():
     if request.method == 'GET':
         return render_template('login.html')
     else:
+        init_db()
         password = request.form['password']
         email = request.form['email']
-        db = DBwrapper()
-        data = db.select('user', {'email':email, 'password':password})
+        data = db_session.execute(select(models.User).filter_by(email=email, password=password)).scalar_one()
         if data:
-            session['user_id'] = data[0]['id']
+            session['user_id'] = data.id
             return f'You are in {email} {password}'
         else:
             return f'Wrong password'
@@ -77,26 +39,31 @@ def get_register():
     if request.method == 'GET':
         return render_template('register.html')
     else:
+        init_db()
         username = request.form['username']
         surname = request.form['surname']
         password = request.form['password']
         email = request.form['email']
-        db = DBwrapper()
-        db.insert('user', {'name':username, 'surname':surname,'password':password,'email':email})
+        user = models.User(name=username,surname=surname,password=password,email=email)
+        db_session.add(user)
+        db_session.commit()
         return f'User registered: {username} {password} {email} {surname}'
 
 
 @app.route('/category', methods=['GET', 'POST'])
 def get_all_category():
     if 'user_id' in session:
-        db = DBwrapper()
+        init_db()
         if request.method == 'GET':
-            data = db.select('category',{'owner':(session['user_id'], 1)})
-            return render_template("all_category.html", user_categories=data)
+            data = list(db_session.execute(select(models.Catgeory).filter_by(owner=session['user_id'])).scalars())
+            data_system = list(db_session.execute(select(models.Catgeory).filter_by(owner=1)).scalars())
+            return render_template("all_category.html", user_categories=data+data_system)
         else:
             category_name = request.form['category_name']
             category_owner = session['user_id']
-            db.insert('category', {"name":category_name,"owner":category_owner})
+            new_category = models.Catgeory(name=category_name, owner=category_owner)
+            db_session.add(new_category)
+            db_session.commit()
             return redirect('/category')
     else:
         return redirect('/login')
@@ -105,10 +72,10 @@ def get_all_category():
 @app.route('/category/<category_id>', methods=['GET', 'POST'])
 def get_category(category_id):
     if 'user_id' in session:
-        db = DBwrapper()
+        init_db()
         if request.method == 'GET':
-            transactions = db.select('transaction', {'category':category_id,'owner':session["user_id"]})
-            current_category = db.select('category', {'id':category_id})
+            transactions = list(db_session.execute(select(models.Transaction).filter_by(category=category_id,owner=session["user_id"])).scalars())
+            current_category = list(db_session.execute(select(models.Catgeory).filter_by(id=category_id)).scalars())
             return render_template('one_category.html', category=current_category, transactions=transactions)
         else:
             return 'edit category'
@@ -124,10 +91,9 @@ def delete_category(category_id):
 @app.route('/income', methods=['GET', 'POST'])
 def get_all_income():
     if 'user_id' in session:
-        db = DBwrapper()
+        init_db()
         if request.method == 'GET':
-            data = db.select('transaction', {'owner':session["user_id"], 'type':INCOME})
-
+            data = list(db_session.execute(select(models.Transaction).filter_by(owner=session['user_id'],type=INCOME)).scalars())
             return render_template("dashboard.html", transactions=data, dashboard_action='/income')
         else:
                 transaction_description = request.form['description']
@@ -136,7 +102,9 @@ def get_all_income():
                 transaction_date = request.form['date']
                 transaction_owner = session['user_id']
                 transaction_type = INCOME
-                db.insert("transaction", {"description":transaction_description, "category":transaction_category, "amount":transaction_amount, "date":transaction_date, "owner":transaction_owner, "type":transaction_type})
+                new_category = models.Transaction(description=transaction_description, category=transaction_category, amount=transaction_amount,date=transaction_date, owner=transaction_owner, type=transaction_type)
+                db_session.add(new_category)
+                db_session.commit()
                 return redirect('/income')
     else:
         return redirect('/login')
@@ -155,9 +123,9 @@ def get_income(income_id):
 @app.route('/spend', methods=['GET', 'POST'])
 def get_all_spend():
     if 'user_id' in session:
-        db = DBwrapper()
+        init_db()
         if request.method == 'GET':
-            data = db.select('transaction', {'owner': session["user_id"], 'type': INCOME})
+            data = list(db_session.execute(select(models.Transaction).filter_by(owner=session['user_id'],type=INCOME)).scalars())
             return render_template("dashboard.html", transactions=data, dashboard_action='/spend')
         else:
                 transaction_description = request.form['description']
@@ -166,7 +134,9 @@ def get_all_spend():
                 transaction_date = request.form['date']
                 transaction_owner = session['user_id']
                 transaction_type = SPEND
-                db.insert("transaction", {"description":transaction_description, "category":transaction_category, "amount":transaction_amount, "date":transaction_date, "owner":transaction_owner, "type":transaction_type})
+                new_category = models.Transaction(description=transaction_description, category=transaction_category, amount=transaction_amount,date=transaction_date, owner=transaction_owner, type=transaction_type)
+                db_session.add(new_category)
+                db_session.commit()
                 return redirect('/spend')
     else:
         return redirect('/login')
